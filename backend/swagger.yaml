@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: FSD_1_SecureUserAuthentication_BYTE API
+  description: Secure User Authentication System — AVIP 2026, Full Stack Development Task 1
+  version: 2.0.0
+servers:
+  - url: http://localhost:5000/api
+    description: Local development
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, example: "665f1a2b3c4d5e6f7a8b9c0d" }
+        name: { type: string, example: "Jane Doe" }
+        email: { type: string, example: "jane@example.com" }
+        isVerified: { type: boolean, example: false }
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, example: "Jane Doe" }
+                email: { type: string, example: "jane@example.com" }
+                password: { type: string, example: "secret123" }
+      responses:
+        '201': { description: User registered successfully, returns access + refresh tokens }
+        '400': { description: Validation error }
+        '409': { description: Email already registered }
+  /auth/verify-email/{token}:
+    get:
+      summary: Verify a user's email using the token from the (mocked) verification email
+      tags: [Auth]
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Email verified successfully }
+        '400': { description: Token invalid or expired }
+  /auth/login:
+    post:
+      summary: Log in and receive an access + refresh token pair
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "jane@example.com" }
+                password: { type: string, example: "secret123" }
+      responses:
+        '200': { description: Login successful }
+        '401': { description: Invalid credentials }
+        '423': { description: Account locked due to too many failed attempts }
+        '429': { description: Rate limited - too many login attempts from this IP }
+  /auth/refresh:
+    post:
+      summary: Exchange a valid refresh token for a new access + refresh token pair
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: New token pair issued }
+        '401': { description: Refresh token invalid or expired }
+  /auth/logout:
+    post:
+      summary: Log out - blacklists the current access token and revokes the refresh token
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: Logged out successfully }
+        '401': { description: Not authorized }
+  /auth/forgot-password:
+    post:
+      summary: Request a password reset link (mocked email, logged to server console)
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, example: "jane@example.com" }
+      responses:
+        '200': { description: If the email is registered, a reset link has been sent }
+  /auth/reset-password/{token}:
+    post:
+      summary: Reset password using the token from the (mocked) reset email
+      tags: [Auth]
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, example: "newSecret456" }
+      responses:
+        '200': { description: Password reset successfully }
+        '400': { description: Token invalid or expired }
+  /auth/profile:
+    get:
+      summary: Get the logged-in user's profile (protected)
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Returns user profile }
+        '401': { description: Not authorized - missing, invalid, or revoked token }
