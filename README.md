@@ -10,6 +10,7 @@
 [![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![JWT](https://img.shields.io/badge/JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 
 A full-stack MERN application implementing registration, login, hashed password storage, JWT-based session handling,  account lockout, password reset, email verification, and a protected route that only returns data to an authenticated user.
