@@ -16,17 +16,29 @@ const Dashboard = () => {
         setProfile(res.data.user);
       } catch (err) {
         setError('Session expired. Please log in again.');
-        localStorage.removeItem('token');
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         setTimeout(() => navigate('/login'), 1500);
       }
     };
     fetchProfile();
   }, [navigate]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem('refreshToken');
+    try {
+      // Blacklists the current access token server-side and revokes
+      // the refresh token, not just a client-side localStorage clear.
+      await api.post('/auth/logout', { refreshToken });
+    } catch (err) {
+      // Even if the server call fails (e.g. token already expired),
+      // still clear local state so the user isn't stuck.
+    } finally {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      navigate('/login');
+    }
   };
 
   return (
@@ -45,6 +57,7 @@ const Dashboard = () => {
               <li><strong>Name:</strong> {profile.name}</li>
               <li><strong>Email:</strong> {profile.email}</li>
               <li><strong>User ID:</strong> {profile._id}</li>
+              <li><strong>Verified:</strong> {profile.isVerified ? 'Yes' : 'No (check server logs for verification link)'}</li>
               <li><strong>Joined:</strong> {new Date(profile.createdAt).toLocaleString()}</li>
             </ul>
           </div>
