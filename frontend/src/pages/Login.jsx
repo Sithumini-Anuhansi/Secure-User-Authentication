@@ -16,10 +16,13 @@ const Login = () => {
     setLoading(true);
     try {
       const res = await api.post('/auth/login', form);
-      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('accessToken', res.data.accessToken);
+      localStorage.setItem('refreshToken', res.data.refreshToken);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       navigate('/dashboard');
     } catch (err) {
+      // Account-lockout (423) and rate-limit (429) responses get their
+      // own message from the server; surface it directly.
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
@@ -36,6 +39,7 @@ const Login = () => {
         <label>Password</label>
         <input type="password" name="password" value={form.password} onChange={handleChange} required />
         <button type="submit" disabled={loading}>{loading ? 'Logging in...' : 'Login'}</button>
+        <p className="switch-link"><Link to="/forgot-password">Forgot password?</Link></p>
         <p className="switch-link">Don't have an account? <Link to="/register">Register</Link></p>
       </form>
     </div>
