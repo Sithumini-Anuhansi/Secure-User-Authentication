@@ -130,5 +130,65 @@ describe('Auth API', () => {
       const res = await request(app).post('/api/auth/refresh').send({ refreshToken: 'garbage' });
       expect(res.statusCode).toBe(401);
     });
+
+    it('detects reuse of an already-rotated refresh token and revokes all sessions', async () => {
+      const registerRes = await request(app).post('/api/auth/register').send(testUser);
+      const { accessToken, refreshToken: originalRefreshToken } = registerRes.body;
+
+      // First rotation — legitimate use, succeeds and retires originalRefreshToken.
+      const firstRefresh = await request(app).post('/api/auth/refresh').send({ refreshToken: originalRefreshToken });
+      expect(firstRefresh.statusCode).toBe(200);
+
+      // Replaying the now-retired original token simulates a stolen-token
+      // attacker (or a race) — this must be rejected AND kill every session.
+      const reuseAttempt = await request(app).post('/api/auth/refresh').send({ refreshToken: originalRefreshToken });
+      expect(reuseAttempt.statusCode).toBe(401);
+      expect(reuseAttempt.body.message).toMatch(/reuse detected/i);
+
+      // The rotated (legitimate) token from the first refresh should now
+      // ALSO be rejected, since reuse detection revokes the whole session.
+      const { refreshToken: rotatedToken } = firstRefresh.body;
+      const afterRevocation = await request(app).post('/api/auth/refresh').send({ refreshToken: rotatedToken });
+      expect(afterRevocation.statusCode).toBe(401);
+
+      // The original access token should also be rejected immediately,
+      // even though it hasn't naturally expired yet.
+      const profileRes = await request(app).get('/api/auth/profile').set('Authorization', `Bearer ${accessToken}`);
+      expect(profileRes.statusCode).toBe(401);
+    });
+  });
+
+  describe('Active Sessions', () => {
+    it('lists the current session after login (happy path)', async () => {
+      const registerRes = await request(app).post('/api/auth/register').send(testUser);
+      const { accessToken } = registerRes.body;
+
+      const res = await request(app).get('/api/auth/sessions').set('Authorization', `Bearer ${accessToken}`);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.body.sessions.length).toBe(1);
+      expect(res.body.sessions[0].userAgent).toBeDefined();
+    });
+
+    it('revokes a specific session by ID, after which its refresh token no longer works', async () => {
+      const registerRes = await request(app).post('/api/auth/register').send(testUser);
+      const { accessToken, refreshToken } = registerRes.body;
+
+      const sessionsRes = await request(app).get('/api/auth/sessions').set('Authorization', `Bearer ${accessToken}`);
+      const sessionId = sessionsRes.body.sessions[0].id;
+
+      const revokeRes = await request(app)
+        .delete(`/api/auth/sessions/${sessionId}`)
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(revokeRes.statusCode).toBe(200);
+
+      const refreshRes = await request(app).post('/api/auth/refresh').send({ refreshToken });
+      expect(refreshRes.statusCode).toBe(401);
+    });
+
+    it('rejects session list requests with no token', async () => {
+      const res = await request(app).get('/api/auth/sessions');
+      expect(res.statusCode).toBe(401);
+    });
   });
 });
