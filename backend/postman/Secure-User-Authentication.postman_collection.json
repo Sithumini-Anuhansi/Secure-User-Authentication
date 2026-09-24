@@ -5,9 +5,22 @@
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:5000/api" },
-    { "key": "accessToken", "value": "" },
-    { "key": "refreshToken", "value": "" }
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -28,7 +41,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"password\": \"secret123\"\n}"
@@ -54,7 +72,12 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"jane@example.com\",\n  \"password\": \"secret123\"\n}"
@@ -66,7 +89,12 @@
       "name": "Get Profile (Protected)",
       "request": {
         "method": "GET",
-        "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
         "url": "{{baseUrl}}/auth/profile"
       }
     },
@@ -88,10 +116,94 @@
       ],
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/refresh"
+      }
+    },
+    {
+      "name": "Get Active Sessions",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  const data = pm.response.json();",
+              "  if (data.sessions && data.sessions.length > 0) {",
+              "    pm.collectionVariables.set('sessionId', data.sessions[0].id);",
+              "  }",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/sessions"
+      }
+    },
+    {
+      "name": "Revoke One Session",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/sessions/{{sessionId}}"
+      }
+    },
+    {
+      "name": "Revoke All Other Sessions",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"currentFamily\": \"\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/sessions"
+      }
+    },
+    {
+      "name": "Refresh Token Reuse Attack (replay old token - 401 example)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"PASTE_AN_ALREADY_ROTATED_REFRESH_TOKEN_HERE\"\n}"
         },
         "url": "{{baseUrl}}/auth/refresh"
       }
@@ -101,8 +213,14 @@
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Authorization", "value": "Bearer {{accessToken}}" },
-          { "key": "Content-Type", "value": "application/json" }
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
         ],
         "body": {
           "mode": "raw",
@@ -115,7 +233,12 @@
       "name": "Forgot Password",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"email\": \"jane@example.com\"\n}"
@@ -127,7 +250,12 @@
       "name": "Reset Password",
       "request": {
         "method": "POST",
-        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
         "body": {
           "mode": "raw",
           "raw": "{\n  \"password\": \"newSecret456\"\n}"

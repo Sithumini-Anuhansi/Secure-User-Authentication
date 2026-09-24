@@ -73,7 +73,7 @@ paths:
         '429': { description: Rate limited - too many login attempts from this IP }
   /auth/refresh:
     post:
-      summary: Exchange a valid refresh token for a new access + refresh token pair
+      summary: Exchange a valid refresh token for a new access + refresh token pair (rotates the token; detects reuse/theft)
       tags: [Auth]
       requestBody:
         required: true
@@ -86,7 +86,41 @@ paths:
                 refreshToken: { type: string }
       responses:
         '200': { description: New token pair issued }
-        '401': { description: Refresh token invalid or expired }
+        '401': { description: "Refresh token invalid/expired, OR reuse detected (all sessions revoked)" }
+  /auth/sessions:
+    get:
+      summary: List this user's active device sessions
+      tags: [Sessions]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Array of active sessions (device, IP, last used) }
+        '401': { description: Not authorized }
+    delete:
+      summary: Revoke all sessions except the current one ("log out of all other devices")
+      tags: [Sessions]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                currentFamily: { type: string, description: "Session family to keep; omit to revoke everything" }
+      responses:
+        '200': { description: Other sessions revoked }
+  /auth/sessions/{id}:
+    delete:
+      summary: Revoke one specific session by ID ("log out this device")
+      tags: [Sessions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Session revoked }
+        '404': { description: Session not found }
   /auth/logout:
     post:
       summary: Log out - blacklists the current access token and revokes the refresh token
