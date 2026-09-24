@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api/axios';
 
 // This is the protected page — it only renders data returned by the
@@ -45,7 +45,10 @@ const Dashboard = () => {
     <div className="dashboard-container">
       <nav className="navbar">
         <h3>Secure Dashboard</h3>
-        <button onClick={handleLogout}>Logout</button>
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <Link to="/sessions" className="switch-link" style={{ color: '#38bdf8' }}>Active Sessions</Link>
+          <button onClick={handleLogout}>Logout</button>
+        </div>
       </nav>
       <div className="dashboard-content">
         {error && <div className="error-banner">{error}</div>}

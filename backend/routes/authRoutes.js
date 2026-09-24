@@ -8,14 +8,16 @@ const {
   logout,
   verifyEmail,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  getSessions,
+  revokeSession,
+  revokeOtherSessions
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
 const { loginLimiter } = require('../middleware/rateLimiters');
 
 const router = express.Router();
 
-// Validation rules
 const registerValidation = [
   body('name').trim().notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('A valid email is required').normalizeEmail(),
@@ -40,11 +42,16 @@ router.get('/verify-email/:token', verifyEmail);
 // @route   POST /api/auth/login  (rate-limited: 10 attempts / 15 min / IP)
 router.post('/login', loginLimiter, loginValidation, login);
 
-// @route   POST /api/auth/refresh
+// @route   POST /api/auth/refresh  (rotates the token, detects reuse/theft)
 router.post('/refresh', refresh);
 
-// @route   POST /api/auth/logout  (protected - blacklists the access token)
+// @route   POST /api/auth/logout  (protected - logs out THIS device only)
 router.post('/logout', protect, logout);
+
+// --- Active sessions ("logged in devices") management ---
+router.get('/sessions', protect, getSessions);
+router.delete('/sessions/:id', protect, revokeSession);
+router.delete('/sessions', protect, revokeOtherSessions);
 
 // @route   POST /api/auth/forgot-password
 router.post('/forgot-password', body('email').isEmail().withMessage('A valid email is required'), forgotPassword);

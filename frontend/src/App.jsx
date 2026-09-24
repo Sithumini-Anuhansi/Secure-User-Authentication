@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import VerifyEmail from './pages/VerifyEmail';
+import Sessions from './pages/Sessions';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -21,6 +22,14 @@ function App() {
         element={
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/sessions"
+        element={
+          <ProtectedRoute>
+            <Sessions />
           </ProtectedRoute>
         }
       />

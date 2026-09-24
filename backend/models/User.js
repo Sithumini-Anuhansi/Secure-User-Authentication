@@ -39,14 +39,12 @@ const UserSchema = new mongoose.Schema(
     failedLoginAttempts: { type: Number, default: 0, select: false },
     lockUntil: { type: Date, select: false },
 
-    // --- Refresh tokens (supports multiple active sessions/devices) ---
-    refreshTokens: [
-      {
-        token: { type: String, select: false },
-        expiresAt: { type: Date },
-        createdAt: { type: Date, default: Date.now }
-      }
-    ]
+    // If set, any access token *issued before* this timestamp is
+    // rejected even if its own expiry hasn't passed yet — this is
+    // what lets "revoke all sessions" (or reuse detection) take
+    // effect immediately, without having to blacklist every
+    // individual access token one by one.
+    sessionsRevokedAt: { type: Date, select: false }
   },
   { timestamps: true }
 );
