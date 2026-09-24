@@ -1,29 +1,39 @@
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const TokenBlacklist = require('../models/TokenBlacklist');
+const RefreshSession = require('../models/RefreshSession');
 const sendEmail = require('../utils/sendEmail');
 const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
-  refreshTokenExpiryDate
+  refreshTokenExpiryDate,
+  hashJti
 } = require('../utils/tokens');
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_TIME_MS = 15 * 60 * 1000; // 15 minutes
 
-// Issues a fresh access + refresh token pair and stores the refresh
-// token on the user document so it can be revoked later.
-const issueTokenPair = async (user) => {
+// Starts a brand new session (new family) — used on register/login,
+// i.e. whenever this is a fresh device/browser logging in, not a
+// token rotation of an existing session.
+const startNewSession = async (user, req) => {
   const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
+  const family = crypto.randomUUID();
+  const jti = crypto.randomUUID();
+  const refreshToken = generateRefreshToken(user, family, jti);
 
-  user.refreshTokens.push({ token: refreshToken, expiresAt: refreshTokenExpiryDate() });
-  // Prune any refresh tokens that have already expired, so this array
-  // doesn't grow unbounded for users who log in often.
-  user.refreshTokens = user.refreshTokens.filter((rt) => rt.expiresAt > new Date());
-  await user.save();
+  await RefreshSession.create({
+    user: user._id,
+    family,
+    currentJtiHash: hashJti(jti),
+    userAgent: req.headers['user-agent'] || 'Unknown device',
+    ip: req.ip,
+    lastUsedAt: new Date(),
+    expiresAt: refreshTokenExpiryDate()
+  });
 
   return { accessToken, refreshToken };
 };
@@ -59,7 +69,7 @@ exports.register = async (req, res) => {
       text: `Welcome ${user.name}! Verify your account: ${verifyUrl}`
     });
 
-    const { accessToken, refreshToken } = await issueTokenPair(user);
+    const { accessToken, refreshToken } = await startNewSession(user, req);
 
     return res.status(201).json({
       success: true,
@@ -115,7 +125,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // --- Account lockout check ---
     if (user.isLocked()) {
       const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / 60000);
       return res.status(423).json({
@@ -140,11 +149,11 @@ exports.login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    // Successful login — reset lockout counters
     user.failedLoginAttempts = 0;
     user.lockUntil = undefined;
+    await user.save();
 
-    const { accessToken, refreshToken } = await issueTokenPair(user);
+    const { accessToken, refreshToken } = await startNewSession(user, req);
 
     return res.status(200).json({
       success: true,
@@ -160,6 +169,17 @@ exports.login = async (req, res) => {
 
 // @route   POST /api/auth/refresh
 // @access  Public (requires a valid refresh token in the body)
+//
+// Rotation + reuse detection: every refresh token carries a `family`
+// (constant per device session) and a `jti` (changes every rotation).
+// We only ever store a hash of the CURRENT jti for that family.
+//   - Presented jti matches the stored one → legitimate, expected use.
+//     Rotate: issue a new jti/token pair, update the stored hash.
+//   - Presented jti does NOT match → this exact token was already
+//     rotated away earlier, meaning someone is replaying an old,
+//     stolen refresh token. We can no longer tell which of "attacker"
+//     or "legitimate user" we're talking to, so we treat it as a
+//     compromise: revoke every session this user has, everywhere.
 exports.refresh = async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
@@ -168,20 +188,38 @@ exports.refresh = async (req, res) => {
 
   try {
     const decoded = verifyRefreshToken(refreshToken);
+    const { id, family, jti } = decoded;
 
-    const user = await User.findById(decoded.id).select('+refreshTokens.token');
+    const session = await RefreshSession.findOne({ user: id, family, revoked: false });
+
+    if (!session || session.expiresAt < new Date()) {
+      return res.status(401).json({ success: false, message: 'Session is invalid or expired, please log in again' });
+    }
+
+    if (session.currentJtiHash !== hashJti(jti)) {
+      // --- Reuse detected: nuke every session for this user ---
+      await RefreshSession.updateMany({ user: id }, { revoked: true });
+      await User.updateOne({ _id: id }, { sessionsRevokedAt: new Date() });
+
+      return res.status(401).json({
+        success: false,
+        message: 'Refresh token reuse detected. All sessions have been revoked for your security — please log in again.'
+      });
+    }
+
+    const user = await User.findById(id);
     if (!user) {
       return res.status(401).json({ success: false, message: 'User no longer exists' });
     }
 
-    const storedToken = user.refreshTokens.find((rt) => rt.token === refreshToken);
-    if (!storedToken || storedToken.expiresAt < new Date()) {
-      return res.status(401).json({ success: false, message: 'Refresh token is invalid or expired' });
-    }
+    // Legitimate rotation: same family, new jti.
+    const newJti = crypto.randomUUID();
+    const accessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user, family, newJti);
 
-    // Rotate: remove the used refresh token and issue a brand new pair.
-    user.refreshTokens = user.refreshTokens.filter((rt) => rt.token !== refreshToken);
-    const { accessToken, refreshToken: newRefreshToken } = await issueTokenPair(user);
+    session.currentJtiHash = hashJti(newJti);
+    session.lastUsedAt = new Date();
+    await session.save();
 
     return res.status(200).json({ success: true, accessToken, refreshToken: newRefreshToken });
   } catch (err) {
@@ -190,30 +228,94 @@ exports.refresh = async (req, res) => {
 };
 
 // @route   POST /api/auth/logout
-// @access  Private
+// @access  Private — logs out THIS device only (blacklists the
+//          current access token, revokes this one session/family).
 exports.logout = async (req, res) => {
   try {
     const { refreshToken } = req.body;
     const accessToken = req.token; // set by the protect middleware
 
-    // Blacklist the access token so it's rejected immediately, even
-    // though its JWT signature would otherwise remain valid until expiry.
-    const decoded = require('jsonwebtoken').decode(accessToken);
-    if (decoded?.exp) {
-      await TokenBlacklist.create({ token: accessToken, expiresAt: new Date(decoded.exp * 1000) });
+    const decodedAccess = jwt.decode(accessToken);
+    if (decodedAccess?.exp) {
+      await TokenBlacklist.create({ token: accessToken, expiresAt: new Date(decodedAccess.exp * 1000) });
     }
 
-    // Revoke the refresh token too, if one was provided.
     if (refreshToken) {
-      await User.updateOne(
-        { _id: req.user.id },
-        { $pull: { refreshTokens: { token: refreshToken } } }
-      );
+      try {
+        const { family } = verifyRefreshToken(refreshToken);
+        await RefreshSession.updateOne({ user: req.user.id, family }, { revoked: true });
+      } catch {
+        // Refresh token already invalid/expired — nothing to revoke, ignore.
+      }
     }
 
     return res.status(200).json({ success: true, message: 'Logged out successfully' });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Server error during logout', error: err.message });
+  }
+};
+
+// @route   GET /api/auth/sessions
+// @access  Private — lists this user's active (non-revoked,
+//          non-expired) device sessions for the "Active Sessions" page.
+exports.getSessions = async (req, res) => {
+  try {
+    const sessions = await RefreshSession.find({
+      user: req.user.id,
+      revoked: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ lastUsedAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      sessions: sessions.map((s) => ({
+        id: s._id,
+        family: s.family,
+        userAgent: s.userAgent,
+        ip: s.ip,
+        createdAt: s.createdAt,
+        lastUsedAt: s.lastUsedAt
+      }))
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Server error fetching sessions', error: err.message });
+  }
+};
+
+// @route   DELETE /api/auth/sessions/:id
+// @access  Private — revoke one specific device/session ("log out
+//          this device" from the sessions list).
+exports.revokeSession = async (req, res) => {
+  try {
+    const session = await RefreshSession.findOne({ _id: req.params.id, user: req.user.id });
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+    session.revoked = true;
+    await session.save();
+    return res.status(200).json({ success: true, message: 'Session revoked' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Server error revoking session', error: err.message });
+  }
+};
+
+// @route   DELETE /api/auth/sessions
+// @access  Private — "Log out of all other devices": revokes every
+//          session except the one the caller is currently using.
+exports.revokeOtherSessions = async (req, res) => {
+  try {
+    const { currentFamily } = req.body;
+    const filter = { user: req.user.id };
+    if (currentFamily) filter.family = { $ne: currentFamily };
+
+    const result = await RefreshSession.updateMany(filter, { revoked: true });
+
+    return res.status(200).json({
+      success: true,
+      message: `Revoked ${result.modifiedCount} other session(s).`
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Server error revoking sessions', error: err.message });
   }
 };
 
@@ -224,8 +326,6 @@ exports.forgotPassword = async (req, res) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    // Always return 200 here (even if no user matches) so this endpoint
-    // can't be used to enumerate which emails are registered.
     if (!user) {
       return res.status(200).json({ success: true, message: 'If that email is registered, a reset link has been sent.' });
     }
@@ -271,8 +371,11 @@ exports.resetPassword = async (req, res) => {
     user.password = req.body.password; // re-hashed by the pre-save hook
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
-    user.refreshTokens = []; // force re-login on all devices after a password reset
+    user.sessionsRevokedAt = new Date(); // kill any still-valid access tokens immediately
     await user.save();
+
+    // Force re-login everywhere after a password reset.
+    await RefreshSession.updateMany({ user: user._id }, { revoked: true });
 
     return res.status(200).json({ success: true, message: 'Password reset successfully. Please log in again.' });
   } catch (err) {
