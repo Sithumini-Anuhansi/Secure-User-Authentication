@@ -377,3 +377,9 @@ This is the same rotation-with-family-tracking pattern used by production auth s
 [![Email](https://img.shields.io/badge/Email-D14836?style=flat-square&logo=gmail&logoColor=white)](mailto:anuhansisithumini@gmail.com)
 
 </div>
+
+---
+
+<div align="right">
+<img src="https://visitor-badge.laobi.icu/badge?page_id=Sithumini-Anuhansi.Emergency-Blood-Matching-Tool&left_text=Views"/>
+</div>
