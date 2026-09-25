@@ -123,8 +123,8 @@ cp .env.example .env
 npm run dev
 ```
 
-Backend runs at `http://localhost:5000`. 
-Swagger docs at `http://localhost:5000/api-docs`.
+Backend runs at `http://localhost:4000`. 
+Swagger docs at `http://localhost:4000/api-docs`.
 
 ### 2. Frontend
 
@@ -135,7 +135,7 @@ cp .env.example .env
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173`.
+Frontend runs at `http://localhost:4173`.
 
 ## <a id="running-with-docker"></a>🐳 Running with Docker
 
@@ -148,7 +148,7 @@ echo "REFRESH_TOKEN_SECRET=your_other_long_random_secret" >> .env
 docker compose up --build
 ```
 
-This builds the backend image from `backend/Dockerfile`, starts a `mongo:7` container, and connects them on an internal Docker network. The API is available at `http://localhost:5000`. Run the frontend separately with `npm run dev` (it talks to the containerized backend over `VITE_API_URL`).
+This builds the backend image from `backend/Dockerfile`, starts a `mongo:7` container, and connects them on an internal Docker network. The API is available at `http://localhost:4000`. Run the frontend separately with `npm run dev` (it talks to the containerized backend over `VITE_API_URL`).
 
 ## <a id="api-endpoints"></a>🔌 API Endpoints
 
@@ -206,7 +206,7 @@ Content-Type: application/json
 ### Example Authenticated Request (Protected Endpoint)
 
 ```bash
-curl -X GET http://localhost:5000/api/auth/profile \
+curl -X GET http://localhost:4000/api/auth/profile \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
 ```
 
@@ -233,7 +233,7 @@ curl -X GET http://localhost:5000/api/auth/profile \
 ### Refreshing an Expired Access Token
 
 ```bash
-curl -X POST http://localhost:5000/api/auth/refresh \
+curl -X POST http://localhost:4000/api/auth/refresh \
   -H "Content-Type: application/json" \
   -d '{ "refreshToken": "eyJhbGciOiJIUzI1NiIs..." }'
 ```
@@ -241,7 +241,7 @@ curl -X POST http://localhost:5000/api/auth/refresh \
 ### Logging Out
 
 ```bash
-curl -X POST http://localhost:5000/api/auth/logout \
+curl -X POST http://localhost:4000/api/auth/logout \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
   -H "Content-Type: application/json" \
   -d '{ "refreshToken": "eyJhbGciOiJIUzI1NiIs..." }'
@@ -264,7 +264,7 @@ After this, the same access token will return `401` on `/api/auth/profile` even 
 
 ## <a id="api-docs--postman"></a>📘 API Docs & Postman
 
-* **Swagger/OpenAPI** — once the backend is running, open `http://localhost:5000/api-docs` for interactive docs (spec lives at `backend/swagger.yaml`).
+* **Swagger/OpenAPI** — once the backend is running, open `http://localhost:4000/api-docs` for interactive docs (spec lives at `backend/swagger.yaml`).
 * **Postman** — import `backend/postman/Secure-User-Authentication.postman_collection.json`. It auto-captures the access/refresh tokens from Register/Login into collection variables so you can immediately try the protected requests without copy-pasting tokens.
 
 ## <a id="testing"></a>🧪 Testing
@@ -325,8 +325,38 @@ This is the same rotation-with-family-tracking pattern used by production auth s
 
 <br/><br/>
 
+<h3>Forgot Password - Get Reset Link</h3>
+<img src="screenshots/forgot-password.png" alt="Forgot Password Page to get Reset Link" width="700"/>
+
+<br/><br/>
+
+<h3>Reset Password Form</h3>
+<img src="screenshots/reset-password.png" alt="Reset Password Form" width="700"/>
+
+<br/><br/>
+
 <h3>Protected Dashboard</h3>
-<img src="screenshots/dashboard.png" alt="Protected dashboard showing JWT-authenticated profile data" width="700"/>
+<img src="screenshots/secure-dashboard.png" alt="Protected dashboard showing JWT-authenticated profile data" width="700"/>
+
+<br/><br/>
+
+<h3>Active Sessions</h3>
+<img src="screenshots/active-sessions.png" alt="Active Sessions Page" width="700"/>
+
+<br/><br/>
+
+<h3>Swagger Dashboard</h3>
+<img src="screenshots/swagger-dashboard.png" alt="Swagger Dashboard" width="700"/>
+
+<br/><br/>
+
+<h3>Jest Test</h3>
+<img src="screenshots/jest-test.png" alt="Jest Test" width="700"/>
+
+<br/><br/>
+
+<h3>Docker</h3>
+<img src="screenshots/docker.png" alt="Docker" width="700"/>
 
 </div>
 
