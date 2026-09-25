@@ -62,7 +62,7 @@ exports.register = async (req, res) => {
     user.verificationTokenExpires = Date.now() + 24 * 60 * 60 * 1000; // 24h
     await user.save();
 
-    const verifyUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/verify-email/${rawToken}`;
+    const verifyUrl = `${process.env.CLIENT_URL || 'http://localhost:4173'}/verify-email/${rawToken}`;
     await sendEmail({
       to: user.email,
       subject: 'Verify your email',
@@ -335,7 +335,7 @@ exports.forgotPassword = async (req, res) => {
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour
     await user.save();
 
-    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password/${rawToken}`;
+    const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:4173'}/reset-password/${rawToken}`;
     await sendEmail({
       to: user.email,
       subject: 'Password Reset Request',
