@@ -15,12 +15,12 @@ services:
     container_name: fsd1-backend
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "4000:4000"
     environment:
-      PORT: 5000
+      PORT: 4000
       NODE_ENV: production
       MONGO_URI: mongodb://mongo:27017/secureAuthDB
-      CLIENT_URL: http://localhost:5173
+      CLIENT_URL: http://localhost:4173
       JWT_SECRET: ${JWT_SECRET:-change_me_in_dot_env}
       ACCESS_TOKEN_EXPIRES_IN: 15m
       REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET:-change_me_too_in_dot_env}
