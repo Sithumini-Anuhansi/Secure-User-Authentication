@@ -10,10 +10,10 @@
 [![React](https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![JWT](https://img.shields.io/badge/JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 
-A full-stack MERN application implementing registration, login, hashed password storage, JWT-based session handling,  account lockout, password reset, email verification, and a protected route that only returns data to an authenticated user.
+A full-stack MERN application implementing registration, login, hashed password storage, refresh-token session handling,  account lockout, password reset, email verification, and a protected route that only returns data to an authenticated user.
 
 </div>
 
@@ -32,6 +32,8 @@ A full-stack MERN application implementing registration, login, hashed password 
 * [Testing](#testing)
 * [CI/CD](#cicd)
 * [Security Notes](#security-notes)
+* [Refresh Token Rotation & Reuse Detection](#refresh-token)
+* [Active Sessions](#active-sessions)
 * [Screenshots](#screenshots)
 * [Deployment](#deployment)
 
@@ -46,19 +48,21 @@ A full-stack MERN application implementing registration, login, hashed password 
 |**Database**|MongoDB (Mongoose)|
 |**Testing**|Jest · Supertest · mongodb-memory-server|
 |**Docs**|Swagger/OpenAPI · Postman|
-|**DevOps**|Docker · docker-compose · GitHub Actions CLI|
+|**DevOps**|Docker · docker-compose · GitHub Actions CI|
 
 ## <a id="features"></a>✨ Features
 
 * ✅ User registration with server-side validation
-* 🔑 Access + refresh token session handling (15-min access token, 7-day rotating refresh token) — not a single long-lived JWT
+* 🔑 **Access + refresh token** session handling (15-min access token, 7-day rotating refresh token) — not a single long-lived JWT
+* 🕵️ **Refresh token reuse detection** — replaying an already-rotated refresh token (stolen-token signature) instantly revokes every session on the account
+* 💻 **Active Sessions page** — see every logged-in device (browser/OS, IP, last active) and revoke any one individually, or "log out all other devices" in one click
 * 🔒 Passwords hashed with bcrypt — never stored or returned in plain text
 * 🛡️ Protected route that only responds with valid, unexpired, non-blacklisted JWTs
-* 🚪 Server-side logout — blacklists the access token and revokes the refresh token, not just a client-side clear
-* 🔁 Password reset flow — forgot-password → emailed (mocked) reset link → reset
-* ✉️ Email verification on registration (mocked email, logged to server console)
-* 🔐 Account lockout after 5 failed login attempts (15-minute cooldown)
-* 🚫 Rate limiting on `/login` (10 attempts / 15 min / IP) plus a general API limiter
+* 🚪 **Server-side logout** — blacklists the access token and revokes the refresh token, not just a client-side clear
+* 🔁 **Password reset flow** — forgot-password → emailed (mocked) reset link → reset
+* ✉️ **Email verification** on registration (mocked email, logged to server console)
+* 🔐 **Account lockout** after 5 failed login attempts (15-minute cooldown)
+* 🚫 **Rate limiting** on `/login` (10 attempts / 15 min / IP) plus a general API limiter
 * 🪖 `helmet` security headers + `morgan` request logging
 * ⚠️ Consistent error handling with proper HTTP status codes
 * 🧪 Automated Jest/Supertest test suite
@@ -153,8 +157,11 @@ This builds the backend image from `backend/Dockerfile`, starts a `mongo:7` cont
 |POST|`/api/auth/register`|🌐 Public|Register a new user, sends a (mocked) verification email|
 |GET|`/api/auth/verify-email/:token`|🌐 Public|Verify email using the token from the verification email|
 |POST|`/api/auth/login`|🌐 Public 🚫 Rate-limited|Log in, returns an access + refresh token pair|
-|POST|`/api/auth/refresh`|🌐 Public|Exchange a valid refresh token for a new token pair|
-|POST|`/api/auth/logout`|🔒 Protected|Blacklists the access token, revokes the refresh token|
+|POST|`/api/auth/refresh`|🌐 Public|Rotates the refresh token; detects reuse (theft) and revokes all sessions if detected|
+|POST|`/api/auth/logout`|🔒 Protected|Blacklists the access token, this device's session only|
+|GET|`/api/auth/sessions`|🔒 Protected|List all active device sessions (browser/OS, IP, last active)|
+|DELETE|`/api/auth/sessions/:id`|🔒 Protected|Revoke one specific session ("log out this device")|
+|DELETE|`/api/auth/sessions`|🔒 Protected|Revoke every session except the caller's current one|
 |POST|`/api/auth/forgot-password`|🌐 Public|Request a password reset link (mocked email)|
 |POST|`/api/auth/reset-password/:token`|🌐 Public|Reset password using the token from the reset email|
 |GET|`/api/auth/profile`|🔒 Protected|Returns the logged-in user's data|
@@ -286,11 +293,23 @@ Check the Actions tab on GitHub after pushing to see it run.
 
 * Passwords are hashed with bcrypt (10 salt rounds) before being saved — the raw password is never stored or logged.
 * The `password` field uses Mongoose's `select: false` so it is never returned in API responses by default.
-* Access tokens are short-lived (15 min); refresh tokens are longer-lived (7 days), signed with a separate secret, stored per-user, and rotated on every use.
+* Access tokens are short-lived (15 min); refresh tokens are longer-lived (7 days), signed with a **separate** secret, stored per-user, and rotated on every use.
 * Logging out blacklists the access token server-side (TTL-indexed collection, auto-cleaned) and removes the refresh token — a stolen access token can't be replayed after logout.
 * 5 failed login attempts locks the account for 15 minutes; `/login` is additionally rate-limited per IP.
 * `helmet` sets standard security headers; a general rate limiter guards the whole API.
 * All input is validated server-side with `express-validator` before it touches the database.
+
+## <a id="refresh-token"></a>🕵️ Refresh Token Rotation & Reuse Detection
+
+Each refresh token carries two claims: a `family` (constant for one device's login session) and a `jti` (a fresh random ID minted on every rotation). The server only ever stores a **hash** of the current `jti` for that family, in a separate `RefreshSession` document per device — never the raw token.
+* **Normal use:** the client presents a refresh token whose `jti` matches the stored hash → the server rotates it (new `jti`, new tokens issued, same `family`).
+* **Reuse/theft:** the client presents a refresh token whose `jti` does not match — meaning that exact token was already rotated away earlier. There's no way to tell whether this is an attacker replaying a stolen token or a client bug, so the server treats it as compromise: **every session for that user is revoked immediately**, and `sessionsRevokedAt` is stamped on the user so any still-unexpired access tokens are rejected too (see `middleware/auth.js`) — not just the refresh tokens.
+
+This is the same rotation-with-family-tracking pattern used by production auth systems (Auth0, Okta, etc.) — it turns "a refresh token got stolen" from a silent, permanent compromise into a detectable, self-healing event.
+
+## <a id="active-sessions"></a>💻 Active Sessions
+
+`GET /api/auth/sessions` lists every device currently logged in (browser/OS parsed from the User-Agent, IP, first-seen and last-active timestamps). A user can revoke any single device (`DELETE /api/auth/sessions/:id`) or every device except the one they're currently using (`DELETE /api/auth/sessions`) — useful after using a shared/public computer, or simply to audit "is anyone else in my account."
 
 ## <a id="screenshots"></a>📸 Screenshots
 
