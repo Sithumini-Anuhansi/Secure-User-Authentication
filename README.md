@@ -13,6 +13,8 @@
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#)
 
+![Logo](screenshots/secure-user-auth.png)
+
 A full-stack MERN application implementing registration, login, hashed password storage, refresh-token session handling,  account lockout, password reset, email verification, and a protected route that only returns data to an authenticated user.
 
 </div>
